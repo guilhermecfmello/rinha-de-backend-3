@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import logging
 from uuid import UUID
 
 import redis
@@ -7,6 +8,7 @@ from src.config import Config
 from src.schemas import PaymentRequest
 from src.models import PaymentMessageRequest
 
+logger = logging.getLogger(__name__)
 
 class PaymentService:
     def __init__(self):
