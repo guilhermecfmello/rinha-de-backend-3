@@ -14,8 +14,7 @@ class PaymentProcessorService():
         self.processor_default_url = Config.PROCESSOR_DEFAULT_URL
         self.processor_fallback_url = Config.PROCESSOR_FALLBACK_URL
     
-    def process_payment(self, payment_request):
-        logger.info(f"Processing payment request: {payment_request}")
+    def process_payment(self, payment_request: PaymentProcessorRequest):
         payment_processor = PaymentProcessorRequest(**payment_request.dict())
         logger.info(f"Payment request created: {payment_processor}")
         return {"status": "success", "message": "Payment processed successfully"}
