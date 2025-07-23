@@ -1,12 +1,12 @@
 from uuid import UUID
+from pydantic import BaseModel, Field
 
 
-class PaymentMessageRequest():
-    correlationId: UUID
+class PaymentMessageRequest(BaseModel):
+    correlation_id: UUID = Field(..., alias="correlationId")
     amount: float
-    requestedAt: str
+    requested_at: str = Field(..., alias="requestedAt")
 
-    def __init__(self, correlation_id: str, amount: float, requestedAt: str):
-        self.correlationId = correlation_id
-        self.amount = amount
-        self.requestedAt = requestedAt
+    model_config = {
+        "populate_by_name": True
+    }
