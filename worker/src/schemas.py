@@ -18,3 +18,11 @@ class PaymentProcessorRequest(BaseModel):
     model_config = {
         "populate_by_name": True
     }
+    
+    def to_safe_json(self) -> dict:
+        try:
+            raw_dict = self.model_dump()
+            return json.loads(json.dumps(raw_dict, default=str))
+        except Exception as e:
+            logger.error(f"Failed to serialize PaymentProcessorRequest: {e}")
+            raise
