@@ -1,5 +1,5 @@
 redis
-requests
+httpx
 python-dotenv
 pydantic
 pytest
