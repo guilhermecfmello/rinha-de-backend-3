@@ -2,6 +2,7 @@ import logging
 import httpx
 
 from config import Config
+from src.exceptions.exceptions import UnavailablePaymentProcessorException
 from src.schemas import PaymentProcessorRequest
 
 
@@ -19,37 +20,45 @@ class PaymentProcessorService():
         logger.info(f"Processing payment request: {payment_request}")
         try:
             if self._send_request_to_default(payment_request):
-                logger.info("Payment processed successfully by default processor.")
+                logger.info("Payment processed successfully by default processor.", extra={"payment_request": payment_request.model_dump()})
                 return {"status": "success", "message": "Payment processed successfully by default processor."}
             logger.warning("Default processor failed, trying fallback...")
             if self._send_request_to_fallback(payment_request):
-                logger.info("Payment processed successfully by fallback processor.")
+                logger.info("Payment processed successfully by fallback processor.", extra={"payment_request": payment_request.model_dump()})
                 return {"status": "success", "message": "Payment processed successfully by fallback processor."}
             logger.error("Both processors failed.")
             raise Exception("Both processors failed.")
+        except UnavailablePaymentProcessorException as e:
+            logger.error(f"Payment processor unavailable: {e.message}")
+            raise UnavailablePaymentProcessorException("Payment processor is currently unavailable. Please try again later.")
         except Exception as e:
             logger.error(f"Error processing payment: {e}")
             raise Exception("Error processing payment: " + str(e))
 
     def _send_request_to_default(self, payment_request: PaymentProcessorRequest) -> bool:
         logger.info("Sending request to default payment processor...")
-        return self._send_request(self.processor_default_url+self.processor_create_payment_path, payment_request.to_safe_json())
+        return self._send_request(self.processor_default_url + self.processor_create_payment_path, payment_request.to_safe_json())
 
     def _send_request_to_fallback(self, payment_request: PaymentProcessorRequest) -> bool:
         logger.info("Sending request to fallback payment processor...")
-        return self._send_request(self.processor_fallback_url+self.processor_create_payment_path, payment_request.to_safe_json())
+        return self._send_request(self.processor_fallback_url + self.processor_create_payment_path, payment_request.to_safe_json())
 
     def _send_request(self, url: str, body: dict) -> bool:
         try:
             logger.debug(f"Sending POST to {url} with body: {body}")
             headers = {
-                "X-Rinha-Token": Config.RINHA_TOKEN  # You can hardcode the token if needed
+                "X-Rinha-Token": Config.RINHA_TOKEN
             }
             response = httpx.post(url, json=body, headers=headers, timeout=2.0)
 
             logger.debug(f"Received response: {response.status_code} - {response.text}")
-            return response.status_code == 200
-
+            if response.status_code == 200:
+                return True
+            elif 400 <= response.status_code < 500:
+                logger.warning(f"Client error ({response.status_code}) from {url}: {response.text}")
+            elif 500 <= response.status_code < 600:
+                logger.error(f"Server error ({response.status_code}) from {url}: {response.text}")
+                raise UnavailablePaymentProcessorException("Payment processor is currently unavailable. Please try again later.")
         except httpx.RequestError as e:
             logger.error(f"Request to {url} failed: {e}")
             return False
