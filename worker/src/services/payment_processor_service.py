@@ -2,6 +2,7 @@ import logging
 import httpx
 
 from config import Config
+from src.enums import ProcessorType
 from src.exceptions.exceptions import UnavailablePaymentProcessorException
 from src.schemas import PaymentProcessorRequest
 
@@ -15,24 +16,24 @@ class PaymentProcessorService():
         self.processor_default_url = Config.PROCESSOR_DEFAULT_URL
         self.processor_fallback_url = Config.PROCESSOR_FALLBACK_URL
         self.processor_create_payment_path = "/payments"
-
+    
     def process_payment(self, payment_request: PaymentProcessorRequest):
         logger.info(f"Processing payment request: {payment_request.to_safe_json()}")
         try:
             if self._send_request_to_default(payment_request):
                 logger.info("Payment processed successfully by default processor.", extra={"payment_request": payment_request.to_safe_json()})
-                return {"status": "success", "message": "Payment processed successfully by default processor."}
+                return ProcessorType.DEFAULT
         except UnavailablePaymentProcessorException as e:
             logger.error(f"Default Payment processor unavailable: {e.message}. Retrying with fallback processor.")
             if self._send_request_to_fallback(payment_request):
                 logger.info("Payment processed successfully by fallback processor.", extra={"payment_request": payment_request.to_safe_json()})
-                return {"status": "success", "message": "Payment processed successfully by fallback processor."}
+                return ProcessorType.FALLBACK
             else:
                 logger.error("Payment processing failed for both processors.")
-                raise UnavailablePaymentProcessorException("Payment processing failed for both processors.")
+                return ProcessorType.ERROR
         except Exception as e:
             logger.error(f"Error processing payment: {e}")
-            return False
+            return ProcessorType.ERROR
 
     def _send_request_to_default(self, payment_request: PaymentProcessorRequest) -> bool:
         logger.info("Sending request to default payment processor...")
