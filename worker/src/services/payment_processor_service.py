@@ -42,9 +42,9 @@ class PaymentProcessorService():
             return True
         except UnavailablePaymentProcessorException as e:
             logger.error(f"Default processor unavailable: {e.message}")
+            raise e
         except Exception as e:
             logger.error(f"Error sending request to default processor: {e}")
-            raise UnavailablePaymentProcessorException("Default payment processor is currently unavailable. Please try again later.")
         return False
 
     def _send_request_to_fallback(self, payment_request: PaymentProcessorRequest) -> bool:
@@ -69,6 +69,8 @@ class PaymentProcessorService():
                 logger.error(f"Server error ({response.status_code}) from {url}: {response.text}")
                 raise UnavailablePaymentProcessorException("Payment processor is currently unavailable. Please try again later.")
             return False
+        except UnavailablePaymentProcessorException as e:
+            raise e
         except httpx.RequestError as e:
             logger.error(f"Request to {url} failed: {e}")
             return False
