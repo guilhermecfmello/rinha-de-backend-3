@@ -17,27 +17,34 @@ class PaymentProcessorService():
         self.processor_create_payment_path = "/payments"
 
     def process_payment(self, payment_request: PaymentProcessorRequest):
-        logger.info(f"Processing payment request: {payment_request}")
+        logger.info(f"Processing payment request: {payment_request.to_safe_json()}")
         try:
             if self._send_request_to_default(payment_request):
-                logger.info("Payment processed successfully by default processor.", extra={"payment_request": payment_request.model_dump()})
+                logger.info("Payment processed successfully by default processor.", extra={"payment_request": payment_request.to_safe_json()})
                 return {"status": "success", "message": "Payment processed successfully by default processor."}
-            logger.warning("Default processor failed, trying fallback...")
-            if self._send_request_to_fallback(payment_request):
-                logger.info("Payment processed successfully by fallback processor.", extra={"payment_request": payment_request.model_dump()})
-                return {"status": "success", "message": "Payment processed successfully by fallback processor."}
-            logger.error("Both processors failed.")
-            raise Exception("Both processors failed.")
         except UnavailablePaymentProcessorException as e:
-            logger.error(f"Payment processor unavailable: {e.message}")
-            raise UnavailablePaymentProcessorException("Payment processor is currently unavailable. Please try again later.")
+            logger.error(f"Default Payment processor unavailable: {e.message}. Retrying with fallback processor.")
+            if self._send_request_to_fallback(payment_request):
+                logger.info("Payment processed successfully by fallback processor.", extra={"payment_request": payment_request.to_safe_json()})
+                return {"status": "success", "message": "Payment processed successfully by fallback processor."}
+            else:
+                logger.error("Payment processing failed for both processors.")
+                raise UnavailablePaymentProcessorException("Payment processing failed for both processors.")
         except Exception as e:
             logger.error(f"Error processing payment: {e}")
-            raise Exception("Error processing payment: " + str(e))
+            return False
 
     def _send_request_to_default(self, payment_request: PaymentProcessorRequest) -> bool:
         logger.info("Sending request to default payment processor...")
-        return self._send_request(self.processor_default_url + self.processor_create_payment_path, payment_request.to_safe_json())
+        try:
+            self._send_request(self.processor_default_url + self.processor_create_payment_path, payment_request.to_safe_json())
+            return True
+        except UnavailablePaymentProcessorException as e:
+            logger.error(f"Default processor unavailable: {e.message}")
+        except Exception as e:
+            logger.error(f"Error sending request to default processor: {e}")
+            raise UnavailablePaymentProcessorException("Default payment processor is currently unavailable. Please try again later.")
+        return False
 
     def _send_request_to_fallback(self, payment_request: PaymentProcessorRequest) -> bool:
         logger.info("Sending request to fallback payment processor...")
@@ -49,6 +56,7 @@ class PaymentProcessorService():
             headers = {
                 "X-Rinha-Token": Config.RINHA_TOKEN
             }
+            
             response = httpx.post(url, json=body, headers=headers, timeout=2.0)
 
             logger.debug(f"Received response: {response.status_code} - {response.text}")
@@ -59,6 +67,7 @@ class PaymentProcessorService():
             elif 500 <= response.status_code < 600:
                 logger.error(f"Server error ({response.status_code}) from {url}: {response.text}")
                 raise UnavailablePaymentProcessorException("Payment processor is currently unavailable. Please try again later.")
+            return False
         except httpx.RequestError as e:
             logger.error(f"Request to {url} failed: {e}")
             return False
